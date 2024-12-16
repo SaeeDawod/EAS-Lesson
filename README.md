@@ -1,8 +1,5 @@
 # Complete Guide to Ethereum Attestation Service (EAS)
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 ## 1. Introduction to EAS
 
 ### What is EAS?
