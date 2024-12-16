@@ -1,10 +1,3 @@
----
-title: Complete Guide to Ethereum Attestation Service (EAS)
-description: A comprehensive guide to implementing and using the Ethereum Attestation Service (EAS) for creating, managing, and verifying on-chain attestations
-sidebar_position: 2
-keywords: [ethereum, eas, attestation, blockchain, web3, smart contracts, verification, schema registry, resolver]
----
-
 # Complete Guide to Ethereum Attestation Service (EAS)
 
 import Tabs from '@theme/Tabs';
@@ -23,15 +16,9 @@ Ethereum Attestation Service (EAS) is a decentralized protocol that allows users
 - **Security**: Attestations are secured by the Ethereum blockchain.  
 - **Transparency**: All attestations are publicly verifiable.  
 
-<iframe 
-  width="100%" 
-  height="400" 
-  src="https://www.youtube.com/embed/DMGj5GNll0k" 
-  title="Understanding Ethereum Attestation Service (EAS)" 
-  frameborder="0" 
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-  allowfullscreen>
-</iframe>
+
+video: https://www.youtube.com/embed/DMGj5GNll0k
+
 
 ---
 
