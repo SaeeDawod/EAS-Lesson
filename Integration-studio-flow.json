@@ -1,0 +1,330 @@
+[
+    {
+        "id": "eas_flow",
+        "type": "tab",
+        "label": "EAS Attestation Flow",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "setup_inject",
+        "type": "inject",
+        "z": "eas_flow",
+        "name": "Inputs: RpcUrl, Registry address,Eas address, Private key",
+        "props": [
+            {
+                "p": "rpcUrl",
+                "v": "RPC-URL/API-KEY",
+                "vt": "str"
+            },
+            {
+                "p": "registryAddress",
+                "v": "REGISTERY-ADDRESS",
+                "vt": "str"
+            },
+            {
+                "p": "easAddress",
+                "v": "EAS-ADDRESS",
+                "vt": "str"
+            },
+            {
+                "p": "privateKey",
+                "v": "PRIVATE-KEY",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "x": 250,
+        "y": 120,
+        "wires": [
+            [
+                "setup_function"
+            ]
+        ]
+    },
+    {
+        "id": "setup_function",
+        "type": "function",
+        "z": "eas_flow",
+        "name": "Setup Global Variables",
+        "func": "// Initialize provider with specific network parameters\nconst provider = new ethers.JsonRpcProvider(msg.rpcUrl)\n\nconst signer = new ethers.Wallet(msg.privateKey, provider);\n\n// Initialize EAS with specific gas settings\nconst eas = new eassdk.EAS(msg.easAddress);\neas.connect(signer);\n\n// Store in global context\nglobal.set('provider', provider);\nglobal.set('signer', signer);\nglobal.set('eas', eas);\nglobal.set('registryAddress', msg.registryAddress);\n\nmsg.payload = 'EAS Configuration Initialized';\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "ethers",
+                "module": "ethers"
+            },
+            {
+                "var": "eassdk",
+                "module": "@ethereum-attestation-service/eas-sdk"
+            }
+        ],
+        "x": 580,
+        "y": 120,
+        "wires": [
+            [
+                "setup_debug"
+            ]
+        ]
+    },
+    {
+        "id": "register_inject",
+        "type": "inject",
+        "z": "eas_flow",
+        "name": "Register Schema",
+        "props": [],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "x": 120,
+        "y": 260,
+        "wires": [
+            [
+                "register_function"
+            ]
+        ]
+    },
+    {
+        "id": "register_function",
+        "type": "function",
+        "z": "eas_flow",
+        "name": "Register Schema",
+        "func": "// Get global variables set in init\nconst signer = global.get('signer');\nconst registryAddress = global.get('registryAddress');\n\n// Initialize SchemaRegistry contract\nconst schemaRegistry = new ethers.Contract(\n    registryAddress,\n    [\n        \"event Registered(bytes32 indexed uid, address indexed owner, string schema, address resolver, bool revocable)\",\n        \"function register(string calldata schema, address resolver, bool revocable) external returns (bytes32)\"\n    ],\n    signer\n);\n\n// Define what data fields our attestations will contain\nconst schema = \"string username, string platform, string handle\";\nconst resolverAddress = \"0x0000000000000000000000000000000000000000\";  // No special validation needed\nconst revocable = true;  // Attestations can be revoked if needed\n\ntry {\n    const tx = await schemaRegistry.register(schema, resolverAddress, revocable);\n    const receipt = await tx.wait();\n\n    const schemaUID = receipt.logs[0].topics[1];\n    // Store schemaUID in global context for later use\n    global.set('schemaUID', schemaUID);\n\n    msg.payload = {\n        success: true,\n        schemaUID: schemaUID,\n        message: \"Schema registered successfully!\"\n    };\n} catch (error) {\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "ethers",
+                "module": "ethers"
+            }
+        ],
+        "x": 310,
+        "y": 260,
+        "wires": [
+            [
+                "register_debug"
+            ]
+        ]
+    },
+    {
+        "id": "create_inject",
+        "type": "inject",
+        "z": "eas_flow",
+        "name": "Input: Schema uid",
+        "props": [
+            {
+                "p": "schemaUID",
+                "v": "SCHEMA-UID",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "x": 130,
+        "y": 400,
+        "wires": [
+            [
+                "create_function"
+            ]
+        ]
+    },
+    {
+        "id": "create_function",
+        "type": "function",
+        "z": "eas_flow",
+        "name": "Create Attestation",
+        "func": "// Get global variables\nconst eas = global.get('eas');\nconst schemaUID = msg.schemaUID;\n\n// Create an encoder that matches our schema structure\nconst schemaEncoder = new eassdk.SchemaEncoder(\"string username, string platform, string handle\");\n\n// The actual data we want to attest to\nconst attestationData = [\n    { name: \"username\", value: \"awesome_developer\", type: \"string\" },\n    { name: \"platform\", value: \"GitHub\", type: \"string\" },\n    { name: \"handle\", value: \"@devmaster\", type: \"string\" }\n];\n\ntry {\n    // Convert our data into the format EAS expects\n    const encodedData = schemaEncoder.encodeData(attestationData);\n\n    // Create the attestation\n    const tx = await eas.attest({\n        schema: schemaUID,\n        data: {\n            recipient: \"0x0000000000000000000000000000000000000000\",  // Public attestation\n            expirationTime: 0,              // Never expires\n            revocable: true,                // Can be revoked later if needed\n            data: encodedData              // Our encoded attestation data\n        }\n    });\n\n    // Wait for confirmation and get the result\n    const receipt = await tx.wait();\n\n    // Store attestation UID for later verification\n    global.set('attestationUID', receipt.attestationUID);\n\n    msg.payload = {\n        success: true,\n        attestationUID: receipt,\n        message: \"Attestation created successfully!\"\n    };\n} catch (error) {\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "eassdk",
+                "module": "@ethereum-attestation-service/eas-sdk"
+            },
+            {
+                "var": "ethers",
+                "module": "ethers"
+            }
+        ],
+        "x": 330,
+        "y": 400,
+        "wires": [
+            [
+                "create_debug"
+            ]
+        ]
+    },
+    {
+        "id": "verify_inject",
+        "type": "inject",
+        "z": "eas_flow",
+        "name": "Input: Attestation UID",
+        "props": [
+            {
+                "p": "attestationUID",
+                "v": "Attestation UID",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "x": 140,
+        "y": 540,
+        "wires": [
+            [
+                "verify_function"
+            ]
+        ]
+    },
+    {
+        "id": "verify_function",
+        "type": "function",
+        "z": "eas_flow",
+        "name": "Verify Attestation",
+        "func": "const eas = global.get('eas');\nconst attestationUID = msg.attestationUID;\n\ntry {\n    const attestation = await eas.getAttestation(attestationUID);\n    const schemaEncoder = new eassdk.SchemaEncoder(\"string pshandle, string socialMedia, string socialMediaHandle\");\n    const decodedData = schemaEncoder.decodeData(attestation.data);\n\n    msg.payload = {\n        isValid: !attestation.revoked,\n        attestation: {\n            attester: attestation.attester,\n            time: new Date(Number(attestation.time) * 1000).toLocaleString(),\n            expirationTime: attestation.expirationTime > 0 \n                ? new Date(Number(attestation.expirationTime) * 1000).toLocaleString()\n                : 'Never',\n            revoked: attestation.revoked\n        },\n        data: {\n            psHandle: decodedData[0].value.toString(),\n            socialMedia: decodedData[1].value.toString(),\n            socialMediaHandle: decodedData[2].value.toString()\n        }\n    };\n} catch (error) {\n    msg.payload = { \n        success: false, \n        error: error.message,\n        details: JSON.stringify(error, Object.getOwnPropertyNames(error))\n    };\n}\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "eassdk",
+                "module": "@ethereum-attestation-service/eas-sdk"
+            },
+            {
+                "var": "ethers",
+                "module": "ethers"
+            }
+        ],
+        "x": 350,
+        "y": 540,
+        "wires": [
+            [
+                "verify_debug"
+            ]
+        ]
+    },
+    {
+        "id": "setup_debug",
+        "type": "debug",
+        "z": "eas_flow",
+        "name": "Setup Result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 770,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "register_debug",
+        "type": "debug",
+        "z": "eas_flow",
+        "name": "Register Result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 500,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "create_debug",
+        "type": "debug",
+        "z": "eas_flow",
+        "name": "Create Result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 520,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "verify_debug",
+        "type": "debug",
+        "z": "eas_flow",
+        "name": "Verify Result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 530,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "1322bb7438d96baf",
+        "type": "comment",
+        "z": "eas_flow",
+        "name": "Initialize EAS Config",
+        "info": "",
+        "x": 110,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "e5e3294119a80c1b",
+        "type": "comment",
+        "z": "eas_flow",
+        "name": "Register a new schema",
+        "info": "/* SCHEMA GUIDE\nEdit the schema variable to define your attestation fields.\nFormat: \"type name, type name, type name\"\n\nAvailable Types:\n- string (text)\n- bool (true/false)\n- address (wallet address)\n- uint256 (number)\n- bytes32 (hash)\n\nExamples:\n\"string name, string email, bool isVerified\"\n\"string twitter, address wallet, uint256 age\"\n\"string discord, string github, string telegram\"\n*/\n\nconst schema = \"string pshandle, string socialMedia, string socialMediaHandle\";",
+        "x": 120,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "2be090c17b5e4fce",
+        "type": "comment",
+        "z": "eas_flow",
+        "name": "Create Attestation",
+        "info": "",
+        "x": 110,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "3d99f76c5c0bdaf0",
+        "type": "comment",
+        "z": "eas_flow",
+        "name": "Verify Attestation",
+        "info": "",
+        "x": 110,
+        "y": 480,
+        "wires": []
+    }
+]
