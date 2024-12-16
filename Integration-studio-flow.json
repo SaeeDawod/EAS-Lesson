@@ -1,30 +1,30 @@
 [
     {
-        "id": "eas_flow",
+        "id": "8474e5b5cc14f404",
         "type": "tab",
         "label": "EAS Attestation Flow",
         "disabled": false,
         "info": ""
     },
     {
-        "id": "setup_inject",
+        "id": "b5de5b0e9fe658a9",
         "type": "inject",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Inputs: RpcUrl, Registry address,Eas address, Private key",
         "props": [
             {
                 "p": "rpcUrl",
-                "v": "RPC-URL/API-KEY",
+                "v": "JSON-RPC-URL/API-KEY",
                 "vt": "str"
             },
             {
                 "p": "registryAddress",
-                "v": "REGISTERY-ADDRESS",
+                "v": "REGISTRY-ADDRESS",
                 "vt": "str"
             },
             {
                 "p": "easAddress",
-                "v": "EAS-ADDRESS",
+                "v": "EAS-ADDRSS",
                 "vt": "str"
             },
             {
@@ -42,16 +42,16 @@
         "y": 120,
         "wires": [
             [
-                "setup_function"
+                "39dea331a58511f0"
             ]
         ]
     },
     {
-        "id": "setup_function",
+        "id": "39dea331a58511f0",
         "type": "function",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Setup Global Variables",
-        "func": "// Initialize provider with specific network parameters\nconst provider = new ethers.JsonRpcProvider(msg.rpcUrl)\n\nconst signer = new ethers.Wallet(msg.privateKey, provider);\n\n// Initialize EAS with specific gas settings\nconst eas = new eassdk.EAS(msg.easAddress);\neas.connect(signer);\n\n// Store in global context\nglobal.set('provider', provider);\nglobal.set('signer', signer);\nglobal.set('eas', eas);\nglobal.set('registryAddress', msg.registryAddress);\n\nmsg.payload = 'EAS Configuration Initialized';\nreturn msg;",
+        "func": "// Initialize provider with specific network parameters\nconst provider = new ethers.providers.JsonRpcProvider(msg.rpcUrl)\n\nconst signer = new ethers.Wallet(msg.privateKey, provider);\n\n// Initialize EAS with specific gas settings\nconst eas = new eassdk.EAS(msg.easAddress);\neas.connect(signer);\n\n// Store in global context\nglobal.set('provider', provider);\nglobal.set('signer', signer);\nglobal.set('eas', eas);\nglobal.set('registryAddress', msg.registryAddress);\n\nmsg.payload = 'EAS Configuration Initialized';\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -71,14 +71,14 @@
         "y": 120,
         "wires": [
             [
-                "setup_debug"
+                "cb58954d4a5d31be"
             ]
         ]
     },
     {
-        "id": "register_inject",
+        "id": "54239005c465d160",
         "type": "inject",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Register Schema",
         "props": [],
         "repeat": "",
@@ -90,16 +90,16 @@
         "y": 260,
         "wires": [
             [
-                "register_function"
+                "6ae1d0e8f4cf3b60"
             ]
         ]
     },
     {
-        "id": "register_function",
+        "id": "6ae1d0e8f4cf3b60",
         "type": "function",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Register Schema",
-        "func": "// Get global variables set in init\nconst signer = global.get('signer');\nconst registryAddress = global.get('registryAddress');\n\n// Initialize SchemaRegistry contract\nconst schemaRegistry = new ethers.Contract(\n    registryAddress,\n    [\n        \"event Registered(bytes32 indexed uid, address indexed owner, string schema, address resolver, bool revocable)\",\n        \"function register(string calldata schema, address resolver, bool revocable) external returns (bytes32)\"\n    ],\n    signer\n);\n\n// Define what data fields our attestations will contain\nconst schema = \"string username, string platform, string handle\";\nconst resolverAddress = \"0x0000000000000000000000000000000000000000\";  // No special validation needed\nconst revocable = true;  // Attestations can be revoked if needed\n\ntry {\n    const tx = await schemaRegistry.register(schema, resolverAddress, revocable);\n    const receipt = await tx.wait();\n\n    const schemaUID = receipt.logs[0].topics[1];\n    // Store schemaUID in global context for later use\n    global.set('schemaUID', schemaUID);\n\n    msg.payload = {\n        success: true,\n        schemaUID: schemaUID,\n        message: \"Schema registered successfully!\"\n    };\n} catch (error) {\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;",
+        "func": "// Get global variables set in init\nconst eas = global.get('eas'); // Assuming EAS SDK is stored here\nconst signer = global.get('signer'); // Wallet signer instance\nconst registryAddress = global.get('registryAddress'); // Schema registry contract address\n\n// Initialize SchemaRegistry contract\nconst schemaRegistry = new eas.SchemaRegistry({\n    address: registryAddress,\n    signerOrProvider: signer,\n});\n\n// Define the schema fields for attestations\nconst schema = \"string name, string platform, string handle\";\nconst resolverAddress = \"0x0000000000000000000000000000000000000000\"; // Public resolver\nconst revocable = true; // Attestations can be revoked if needed\n\ntry {\n    // Register the schema with gasPrice set to 0\n    const tx = await schemaRegistry.register({\n        schema: schema,\n        resolverAddress: resolverAddress,\n        revocable: revocable,\n    }, { gasPrice: 0 });\n\n    // Wait for the transaction receipt\n    const receipt = await tx.wait();\n\n    // Extract the schemaUID from the logs\n    const schemaUID = receipt.logs[0].topics[1];\n\n    // Store schemaUID in global context for later use\n    global.set('schemaUID', schemaUID);\n\n    // Return success payload\n    msg.payload = {\n        success: true,\n        schemaUID: schemaUID,\n        message: \"Schema registered successfully with zero gas fees!\"\n    };\n} catch (error) {\n    // Return error payload\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;\n",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -115,14 +115,14 @@
         "y": 260,
         "wires": [
             [
-                "register_debug"
+                "6a00ee8af4429403"
             ]
         ]
     },
     {
-        "id": "create_inject",
+        "id": "1ab06e9932517d6c",
         "type": "inject",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Input: Schema uid",
         "props": [
             {
@@ -140,16 +140,16 @@
         "y": 400,
         "wires": [
             [
-                "create_function"
+                "fadab64147ee8f6e"
             ]
         ]
     },
     {
-        "id": "create_function",
+        "id": "fadab64147ee8f6e",
         "type": "function",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Create Attestation",
-        "func": "// Get global variables\nconst eas = global.get('eas');\nconst schemaUID = msg.schemaUID;\n\n// Create an encoder that matches our schema structure\nconst schemaEncoder = new eassdk.SchemaEncoder(\"string username, string platform, string handle\");\n\n// The actual data we want to attest to\nconst attestationData = [\n    { name: \"username\", value: \"awesome_developer\", type: \"string\" },\n    { name: \"platform\", value: \"GitHub\", type: \"string\" },\n    { name: \"handle\", value: \"@devmaster\", type: \"string\" }\n];\n\ntry {\n    // Convert our data into the format EAS expects\n    const encodedData = schemaEncoder.encodeData(attestationData);\n\n    // Create the attestation\n    const tx = await eas.attest({\n        schema: schemaUID,\n        data: {\n            recipient: \"0x0000000000000000000000000000000000000000\",  // Public attestation\n            expirationTime: 0,              // Never expires\n            revocable: true,                // Can be revoked later if needed\n            data: encodedData              // Our encoded attestation data\n        }\n    });\n\n    // Wait for confirmation and get the result\n    const receipt = await tx.wait();\n\n    // Store attestation UID for later verification\n    global.set('attestationUID', receipt.attestationUID);\n\n    msg.payload = {\n        success: true,\n        attestationUID: receipt,\n        message: \"Attestation created successfully!\"\n    };\n} catch (error) {\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;",
+        "func": "// Get global variables\nconst eas = global.get('eas');\nconst schemaUID = msg.schemaUID;\n\n// Create an encoder that matches our schema structure\nconst schemaEncoder = new eassdk.SchemaEncoder(\"string name, string platform, string handle\");\n\n// The actual data we want to attest to\nconst attestationData = [\n    { name: \"name\", value: \"awesome_developer\", type: \"string\" },\n    { name: \"platform\", value: \"GitHub\", type: \"string\" },\n    { name: \"handle\", value: \"@devmaster\", type: \"string\" }\n];\n\ntry {\n    // Convert our data into the format EAS expects\n    const encodedData = schemaEncoder.encodeData(attestationData);\n\n    // Create the attestation with zero gas price\n    const tx = await eas.attest(\n        {\n            schema: schemaUID,\n            data: {\n                recipient: \"0x0000000000000000000000000000000000000000\",  // Public attestation\n                expirationTime: 0,              // Never expires\n                revocable: true,                // Can be revoked later if needed\n                data: encodedData              // Our encoded attestation data\n            }\n        },\n        { gasPrice: 0 } // Explicitly set gas price to 0\n    );\n\n    // Wait for confirmation and get the result\n    const receipt = await tx.wait();\n\n    // Store attestation UID for later verification\n    global.set('attestationUID', receipt.attestationUID);\n\n    msg.payload = {\n        success: true,\n        attestationUID: receipt,\n        message: \"Attestation created successfully with zero gas fees!\"\n    };\n} catch (error) {\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;\n",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -169,19 +169,19 @@
         "y": 400,
         "wires": [
             [
-                "create_debug"
+                "48062e9acdae5ba9"
             ]
         ]
     },
     {
-        "id": "verify_inject",
+        "id": "2b94d8c4fc6af962",
         "type": "inject",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Input: Attestation UID",
         "props": [
             {
                 "p": "attestationUID",
-                "v": "Attestation UID",
+                "v": "ATTESTATION-UID",
                 "vt": "str"
             }
         ],
@@ -194,16 +194,16 @@
         "y": 540,
         "wires": [
             [
-                "verify_function"
+                "e6fe11859b59a987"
             ]
         ]
     },
     {
-        "id": "verify_function",
+        "id": "e6fe11859b59a987",
         "type": "function",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Verify Attestation",
-        "func": "const eas = global.get('eas');\nconst attestationUID = msg.attestationUID;\n\ntry {\n    const attestation = await eas.getAttestation(attestationUID);\n    const schemaEncoder = new eassdk.SchemaEncoder(\"string pshandle, string socialMedia, string socialMediaHandle\");\n    const decodedData = schemaEncoder.decodeData(attestation.data);\n\n    msg.payload = {\n        isValid: !attestation.revoked,\n        attestation: {\n            attester: attestation.attester,\n            time: new Date(Number(attestation.time) * 1000).toLocaleString(),\n            expirationTime: attestation.expirationTime > 0 \n                ? new Date(Number(attestation.expirationTime) * 1000).toLocaleString()\n                : 'Never',\n            revoked: attestation.revoked\n        },\n        data: {\n            psHandle: decodedData[0].value.toString(),\n            socialMedia: decodedData[1].value.toString(),\n            socialMediaHandle: decodedData[2].value.toString()\n        }\n    };\n} catch (error) {\n    msg.payload = { \n        success: false, \n        error: error.message,\n        details: JSON.stringify(error, Object.getOwnPropertyNames(error))\n    };\n}\n\nreturn msg;",
+        "func": "const eas = global.get('eas'); // Retrieve EAS instance from global context\nconst attestationUID = msg.attestationUID; // Retrieve attestation UID from message\n\ntry {\n    // Fetch attestation details using the provided UID\n    const attestation = await eas.getAttestation(attestationUID);\n\n    // Use schema structure consistent with other parts of the project\n    const schemaEncoder = new eassdk.SchemaEncoder(\"string name, string platform, string handle\");\n    const decodedData = schemaEncoder.decodeData(attestation.data);\n\n    // Extract and parse the data fields\n    const name = decodedData[0].value;\n    const platform = decodedData[1].value;\n    const handle = decodedData[2].value;\n\n    msg.payload = {\n        success: true,\n        isValid: !attestation.revoked,\n        attestation: {\n            attester: attestation.attester,\n            time: new Date(Number(attestation.time) * 1000).toLocaleString(),\n            expirationTime: attestation.expirationTime > 0 \n                ? new Date(Number(attestation.expirationTime) * 1000).toLocaleString()\n                : 'Never',\n            revoked: attestation.revoked\n        },\n        data: {\n            name: typeof name === 'object' ? JSON.stringify(name) : name.toString(),\n            platform: typeof platform === 'object' ? JSON.stringify(platform) : platform.toString(),\n            handle: typeof handle === 'object' ? JSON.stringify(handle) : handle.toString()\n        }\n    };\n} catch (error) {\n    // Handle errors and return detailed information\n    msg.payload = { \n        success: false, \n        error: error.message,\n        details: JSON.stringify(error, Object.getOwnPropertyNames(error))\n    };\n}\n\nreturn msg;\n",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -223,14 +223,14 @@
         "y": 540,
         "wires": [
             [
-                "verify_debug"
+                "2c49fdc3d5cc7a89"
             ]
         ]
     },
     {
-        "id": "setup_debug",
+        "id": "cb58954d4a5d31be",
         "type": "debug",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Setup Result",
         "active": true,
         "tosidebar": true,
@@ -243,9 +243,9 @@
         "wires": []
     },
     {
-        "id": "register_debug",
+        "id": "6a00ee8af4429403",
         "type": "debug",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Register Result",
         "active": true,
         "tosidebar": true,
@@ -258,9 +258,9 @@
         "wires": []
     },
     {
-        "id": "create_debug",
+        "id": "48062e9acdae5ba9",
         "type": "debug",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Create Result",
         "active": true,
         "tosidebar": true,
@@ -273,9 +273,9 @@
         "wires": []
     },
     {
-        "id": "verify_debug",
+        "id": "2c49fdc3d5cc7a89",
         "type": "debug",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Verify Result",
         "active": true,
         "tosidebar": true,
@@ -288,9 +288,9 @@
         "wires": []
     },
     {
-        "id": "1322bb7438d96baf",
+        "id": "099fe4e473e4eb12",
         "type": "comment",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Initialize EAS Config",
         "info": "",
         "x": 110,
@@ -298,9 +298,9 @@
         "wires": []
     },
     {
-        "id": "e5e3294119a80c1b",
+        "id": "3562025b039d034b",
         "type": "comment",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Register a new schema",
         "info": "/* SCHEMA GUIDE\nEdit the schema variable to define your attestation fields.\nFormat: \"type name, type name, type name\"\n\nAvailable Types:\n- string (text)\n- bool (true/false)\n- address (wallet address)\n- uint256 (number)\n- bytes32 (hash)\n\nExamples:\n\"string name, string email, bool isVerified\"\n\"string twitter, address wallet, uint256 age\"\n\"string discord, string github, string telegram\"\n*/\n\nconst schema = \"string pshandle, string socialMedia, string socialMediaHandle\";",
         "x": 120,
@@ -308,9 +308,9 @@
         "wires": []
     },
     {
-        "id": "2be090c17b5e4fce",
+        "id": "00c862ccfbb35d61",
         "type": "comment",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Create Attestation",
         "info": "",
         "x": 110,
@@ -318,9 +318,9 @@
         "wires": []
     },
     {
-        "id": "3d99f76c5c0bdaf0",
+        "id": "ebd77c05f852e862",
         "type": "comment",
-        "z": "eas_flow",
+        "z": "8474e5b5cc14f404",
         "name": "Verify Attestation",
         "info": "",
         "x": 110,
