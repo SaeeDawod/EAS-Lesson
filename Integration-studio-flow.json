@@ -19,12 +19,12 @@
             },
             {
                 "p": "registryAddress",
-                "v": "REGISTRY-ADDRESS",
+                "v": "SCHEMA-REGISTRY-ADDRESS",
                 "vt": "str"
             },
             {
                 "p": "easAddress",
-                "v": "EAS-ADDRSS",
+                "v": "EAS-ADDRESS",
                 "vt": "str"
             },
             {
@@ -90,32 +90,7 @@
         "y": 260,
         "wires": [
             [
-                "6ae1d0e8f4cf3b60"
-            ]
-        ]
-    },
-    {
-        "id": "6ae1d0e8f4cf3b60",
-        "type": "function",
-        "z": "8474e5b5cc14f404",
-        "name": "Register Schema",
-        "func": "// Get global variables set in init\nconst eas = global.get('eas'); // Assuming EAS SDK is stored here\nconst signer = global.get('signer'); // Wallet signer instance\nconst registryAddress = global.get('registryAddress'); // Schema registry contract address\n\n// Initialize SchemaRegistry contract\nconst schemaRegistry = new eas.SchemaRegistry({\n    address: registryAddress,\n    signerOrProvider: signer,\n});\n\n// Define the schema fields for attestations\nconst schema = \"string name, string platform, string handle\";\nconst resolverAddress = \"0x0000000000000000000000000000000000000000\"; // Public resolver\nconst revocable = true; // Attestations can be revoked if needed\n\ntry {\n    // Register the schema with gasPrice set to 0\n    const tx = await schemaRegistry.register({\n        schema: schema,\n        resolverAddress: resolverAddress,\n        revocable: revocable,\n    }, { gasPrice: 0 });\n\n    // Wait for the transaction receipt\n    const receipt = await tx.wait();\n\n    // Extract the schemaUID from the logs\n    const schemaUID = receipt.logs[0].topics[1];\n\n    // Store schemaUID in global context for later use\n    global.set('schemaUID', schemaUID);\n\n    // Return success payload\n    msg.payload = {\n        success: true,\n        schemaUID: schemaUID,\n        message: \"Schema registered successfully with zero gas fees!\"\n    };\n} catch (error) {\n    // Return error payload\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;\n",
-        "outputs": 1,
-        "timeout": "",
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [
-            {
-                "var": "ethers",
-                "module": "ethers"
-            }
-        ],
-        "x": 310,
-        "y": 260,
-        "wires": [
-            [
-                "6a00ee8af4429403"
+                "d0c4f0a17eac8d9a"
             ]
         ]
     },
@@ -326,5 +301,30 @@
         "x": 110,
         "y": 480,
         "wires": []
+    },
+    {
+        "id": "d0c4f0a17eac8d9a",
+        "type": "function",
+        "z": "8474e5b5cc14f404",
+        "name": "Register Schema",
+        "func": "// Get global variables set in init\nconst signer = global.get('signer');\nconst registryAddress = global.get('registryAddress');\n\n// Initialize SchemaRegistry contract\nconst schemaRegistry = new ethers.Contract(\n    registryAddress,\n    [\n        \"event Registered(bytes32 indexed uid, address indexed owner, string schema, address resolver, bool revocable)\",\n        \"function register(string calldata schema, address resolver, bool revocable) external returns (bytes32)\"\n    ],\n    signer\n);\n\n// Define what data fields our attestations will contain\nconst schema = \"string name, string platform, string handle\";\nconst resolverAddress = \"0x0000000000000000000000000000000000000000\";  // No special validation needed\nconst revocable = true;  // Attestations can be revoked if needed\n\ntry {\n    const tx = await schemaRegistry.register(schema, resolverAddress, revocable, { gasPrice: 0 });\n    const receipt = await tx.wait();\n\n    const schemaUID = receipt.logs[0].topics[1];\n    // Store schemaUID in global context for later use\n    global.set('schemaUID', schemaUID);\n\n    msg.payload = {\n        success: true,\n        schemaUID: schemaUID,\n        message: \"Schema registered successfully!\"\n    };\n} catch (error) {\n    msg.payload = {\n        success: false,\n        error: error.message\n    };\n}\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "ethers",
+                "module": "ethers"
+            }
+        ],
+        "x": 310,
+        "y": 260,
+        "wires": [
+            [
+                "6a00ee8af4429403"
+            ]
+        ]
     }
 ]
